@@ -3,95 +3,54 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sounds Sus 🎭 Ultra Alpha Multiplayer</title>
+<title>Sounds Sus 🎭 Ultra Alpha - Lobby</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
-body { background:#121212; color:#fff; font-family:Arial; text-align:center; transition:background 0.5s,color 0.5s;}
-input,button,textarea{margin:6px;padding:8px;border-radius:8px;border:none;}
+body{background:#121212;color:#fff;font-family:Arial;text-align:center;transition:background 0.5s,color 0.5s;}
+input,button,select{margin:6px;padding:8px;border-radius:8px;border:none;}
 button{background:#1e88e5;color:white;cursor:pointer;font-weight:bold;transition:all 0.2s;}
 button:hover{background:#1565c0;transform:scale(1.05);}
-#game,#menu,#lobby{display:block;}
-.card-container{perspective:1000px;display:inline-block;margin:20px auto 60px auto;}
-.card{background:#111;border-radius:12px;padding:12px;min-width:250px;min-height:150px;transform-style:preserve-3d;transition:transform 0.8s;margin:auto;z-index:1;}
-.card .front,.card .back{position:absolute;width:100%;height:100%;backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:12px;}
-.card .back{background:#222;color:#fff;transform:rotateY(0deg);font-size:1.2em;}
-.card .front{transform:rotateY(180deg);background:#333;color:#fff;font-size:1em;padding:10px;}
-.card.flipped{transform:rotateY(-180deg);}
-.history{background:#222;padding:8px;border-radius:8px;margin-top:10px;max-height:200px;overflow-y:auto;text-align:left;}
-.history-entry{border-bottom:1px solid #333;padding:4px;}
-#notification{background:#222;padding:8px;border-radius:8px;margin:10px auto;width:300px;}
+#lobby{margin-top:20px;}
 </style>
 </head>
 <body>
 
-<h1>Sounds Sus 🎭 <span id="themeName">(Default)</span></h1>
+<h1>Sounds Sus 🎭 Ultra Alpha</h1>
 
-<div id="menu">
-  <h2>Join or Create Room</h2>
+<div id="joinSection">
   <input id="nameInput" placeholder="Enter your name">
   <input id="roomInput" placeholder="Room code (leave blank to create new)">
   <button id="joinBtn">Join / Create Room</button>
-
-  <div id="lobby" style="display:none;">
-    <h3>Room Code: <span id="roomCodeDisplay"></span></h3>
-    <h4>Players in room:</h4>
-    <ul id="playerList"></ul>
-    <button id="startBtn">Start Game</button>
-  </div>
 </div>
 
-<div id="game" style="display:none;">
-  <h2 id="turnInfo"></h2>
-  <div id="cardSetup">
-    <textarea id="questionInput" placeholder="Enter question"></textarea><br>
-    <textarea id="answerInput" placeholder="Enter correct answer"></textarea><br>
-    <textarea id="fake1" placeholder="Fake answer 1"></textarea><br>
-    <textarea id="fake2" placeholder="Fake answer 2"></textarea><br>
-    <button onclick="prepareCard()">Confirm Card</button>
-    <button onclick="drawRandomCard()">🎲 Draw Random Card</button>
-  </div>
+<div id="lobby" style="display:none;">
+  <h3>Room Code: <span id="roomCodeDisplay"></span></h3>
+  <h4>Players:</h4>
+  <ul id="playerList"></ul>
 
-  <div id="questionScreen" class="card-container">
-    <div class="card" id="cardFrontBack">
-      <div class="front">
-        <h3 id="questionText"></h3>
-        <div id="options"></div>
-      </div>
-      <div class="back">
-        <h3>🂠 Card</h3>
-        <p>Turn to reveal the question!</p>
-      </div>
-    </div>
-  </div>
+  <h4>Theme:</h4>
+  <select id="themeSelect">
+    <option value="classic">🎴 Classic</option>
+    <option value="spooky">🎃 Spooky</option>
+    <option value="retro">🕹️ Retro</option>
+    <option value="neon">💡 Neon</option>
+  </select>
+  <button id="themeBtn">Set Theme</button>
 
-  <div id="notification"></div>
-
-  <h3>Scores</h3>
-  <div id="scores"></div>
-
-  <h3>Round History</h3>
-  <div class="history" id="history"></div>
-
-  <br>
-  <button onclick="returnToMenu()">🏠 Return to Menu</button>
+  <br><br>
+  <button id="startBtn">Start Game</button>
 </div>
 
 <script>
 const socket = io();
-let roomId = null;
-let playerName = null;
-let gameData = { players: [], scores:{}, turnIndex:0, state:"setup", currentCard:null, history:[], guesserQueue:null, currentGuesserIndex:null, theme:"classic"};
-const randomPacks = [
-  {q:"Most sus fruit?", a:"Banana", f1:"Potato", f2:"Cucumber"},
-  {q:"Who invented lying?", a:"Your friend", f1:"Newton", f2:"Elon Musk"},
-  {q:"Most likely to say 'Trust me bro'?", a:"Imposter", f1:"Cat", f2:"Politician"}
-];
+let playerName = "";
+let roomId = "";
 
 // Auto-fill name
 const savedName = localStorage.getItem("playerName");
 if(savedName) document.getElementById("nameInput").value = savedName;
 
-// Join/Create Room
+// Join / create room
 document.getElementById("joinBtn").onclick = () => {
   playerName = document.getElementById("nameInput").value.trim() || "Player-"+Math.floor(Math.random()*1000);
   roomId = document.getElementById("roomInput").value.trim().toUpperCase() || null;
@@ -100,135 +59,34 @@ document.getElementById("joinBtn").onclick = () => {
 };
 
 // Lobby updates
-socket.on("roomJoined",(r)=>{
+socket.on("roomJoined", (r)=>{
   roomId = r;
-  document.getElementById("menu").style.display="block";
+  document.getElementById("joinSection").style.display="none";
   document.getElementById("lobby").style.display="block";
   document.getElementById("roomCodeDisplay").innerText = roomId;
 });
 
-socket.on("updateGame",(data)=>{
-  gameData = data;
+socket.on("updateGame", (data)=>{
   const list = document.getElementById("playerList");
   list.innerHTML="";
-  gameData.players.forEach(p=>{
-    const li=document.createElement("li");
-    li.innerText=p;
-    list.appendChild(li);
+  (data.players||[]).forEach(p=>{
+    const li=document.createElement("li"); li.innerText=p; list.appendChild(li);
   });
-  if(document.getElementById("game").style.display==="block") updateUI();
+  document.getElementById("themeSelect").value = data.theme || "classic";
 });
 
-// Start Game button
-document.getElementById("startBtn").onclick = () => {
-  if(gameData.players.length<2) return alert("Need at least 2 players!");
-  gameData.state="setup"; gameData.turnIndex=0;
-  socket.emit("updateGameState", gameData);
-  document.getElementById("menu").style.display="none";
-  document.getElementById("game").style.display="block";
-  updateUI();
+// Theme change
+document.getElementById("themeBtn").onclick = () => {
+  const theme = document.getElementById("themeSelect").value;
+  socket.emit("setTheme", theme);
 };
 
-// ------------------ Card Logic ------------------
-function drawRandomCard(){
-  const r=randomPacks[Math.floor(Math.random()*randomPacks.length)];
-  document.getElementById("questionInput").value=r.q;
-  document.getElementById("answerInput").value=r.a;
-  document.getElementById("fake1").value=r.f1;
-  document.getElementById("fake2").value=r.f2;
-}
-
-function prepareCard(){
-  const q=document.getElementById("questionInput").value.trim();
-  const correct=document.getElementById("answerInput").value.trim();
-  const f1=document.getElementById("fake1").value.trim();
-  const f2=document.getElementById("fake2").value.trim();
-  if(!q||!correct||!f1||!f2) return showNotification("Fill all fields!");
-
-  let options=[{text:correct,correct:true},{text:f1,correct:false},{text:f2,correct:false}].sort(()=>Math.random()-0.5);
-  const letters=["A","B","C"];
-  options.forEach((opt,i)=>opt.letter=letters[i]);
-
-  gameData.currentCard={question:q,options};
-  gameData.state="question";
-  gameData.guesserQueue=gameData.players.filter((p,i)=>i!==gameData.turnIndex%gameData.players.length);
-  gameData.currentGuesserIndex=0;
-  socket.emit("updateGameState", gameData);
-
-  const cardDiv=document.getElementById("cardFrontBack");
-  cardDiv.classList.remove("flipped");
-  setTimeout(()=>cardDiv.classList.add("flipped"),200);
-
-  const optDiv=document.getElementById("options");
-  optDiv.innerHTML="";
-  options.forEach(opt=>{
-    const btn=document.createElement("button");
-    btn.innerText=`${opt.letter}: ${opt.text}`;
-    btn.onclick=()=>handleGuess(opt.correct);
-    optDiv.appendChild(btn);
-    optDiv.appendChild(document.createElement("br"));
-  });
-  document.getElementById("questionText").innerText=q;
-
-  const correctLetter = options.find(o=>o.correct).letter;
-  showNotification(`(Carder sees) Correct answer: ${correctLetter}`);
-}
-
-// ------------------ Guess Handling ------------------
-function handleGuess(isCorrect){
-  const carderIndex = gameData.turnIndex % gameData.players.length;
-  const carder = gameData.players[carderIndex];
-  const guesser = gameData.guesserQueue[gameData.currentGuesserIndex];
-
-  let result = "";
-  if(isCorrect){ gameData.scores[guesser] +=1; result = `${guesser} guessed correctly!`; }
-  else { gameData.scores[carder] +=1; result = `${guesser} guessed wrong! Point to ${carder}!`; }
-
-  gameData.history.push({q:gameData.currentCard.question, carder, guesser, result});
-  gameData.currentGuesserIndex++;
-
-  if(gameData.currentGuesserIndex >= gameData.guesserQueue.length){
-    gameData.turnIndex++; gameData.state="setup"; gameData.currentCard=null;
-    gameData.guesserQueue=null; gameData.currentGuesserIndex=null;
-    showNotification("Round over! Next carder will start.");
-  } else { showNotification(result); }
-
-  socket.emit("updateGameState", gameData);
-  updateUI();
-}
-
-// ------------------ UI ------------------
-function updateUI(){
-  const carder=gameData.players[gameData.turnIndex % gameData.players.length];
-  document.getElementById("turnInfo").innerText=gameData.state==="setup" ? `${carder}'s Turn - Create a Card` : `${carder}'s Card`;
-
-  document.getElementById("cardSetup").style.display=gameData.state==="setup"?"block":"none";
-  document.getElementById("questionScreen").style.display=gameData.state==="question"?"block":"none";
-
-  let scoreHtml="";
-  for(let [name,score] of Object.entries(gameData.scores)) scoreHtml+=`${name}: ${score}<br>`;
-  document.getElementById("scores").innerHTML=scoreHtml;
-
-  const hist=document.getElementById("history");
-  hist.innerHTML="";
-  gameData.history.slice(-10).forEach(h=>{
-    const div=document.createElement("div");
-    div.className="history-entry";
-    div.innerHTML=`<b>${h.q}</b><br>Carder: ${h.carder}, Guesser: ${h.guesser}<br><i>${h.result}</i>`;
-    hist.appendChild(div);
-  });
-}
-
-// Notification helper
-function showNotification(msg){
-  document.getElementById("notification").innerText = msg;
-}
-
-function returnToMenu(){
-  document.getElementById("menu").style.display="block";
-  document.getElementById("game").style.display="none";
-}
+// Start game
+document.getElementById("startBtn").onclick = () => {
+  if(!roomId) return alert("Join a room first!");
+  if(document.getElementById("playerList").children.length<2) return alert("Need 2+ players!");
+  window.location.href = `game.html?room=${roomId}&player=${encodeURIComponent(playerName)}`;
+};
 </script>
-
 </body>
 </html>
