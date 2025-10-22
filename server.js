@@ -26,41 +26,61 @@ io.on("connection", socket => {
     if(!rooms[roomId].players.includes(playerName)) rooms[roomId].players.push(playerName);
     socket.data = { roomId, playerName };
 
-    socket.emit("roomJoined", roomId);
-    io.to(roomId).emit("updateGame", rooms[roomId]);
+    // Send room info + gameData separately
+    socket.emit("roomJoined", { roomId, theme: rooms[roomId].theme });
+    io.to(roomId).emit("updateRoom", { players: rooms[roomId].players, theme: rooms[roomId].theme, gameData: rooms[roomId].gameData });
   });
 
   socket.on("setTheme", (theme) => {
     const { roomId } = socket.data;
     if(!roomId) return;
     rooms[roomId].theme = theme;
-    io.to(roomId).emit("updateGame", rooms[roomId]);
+
+    // Broadcast updated theme without breaking gameData
+    io.to(roomId).emit("updateRoom", { players: rooms[roomId].players, theme: rooms[roomId].theme, gameData: rooms[roomId].gameData });
   });
 
-  socket.on("startGame", ({ roomId }) => {
-    if(!rooms[roomId]) return;
-    const room = rooms[roomId];
-    if(room.players.length < 2) return;
-    if(!room.gameData){
-      const scores = {};
-      room.players.forEach(p => scores[p]=0);
-      room.gameData = { players: room.players, scores, turnIndex:0, state:"setup", currentCard:null, history:[], guesserQueue:null, currentGuesserIndex:null, theme: room.theme };
-    }
-    io.to(roomId).emit("updateGame", room.gameData);
-  });
-
-  socket.on("updateGameState", (data) => {
+  socket.on("startGame", () => {
     const { roomId } = socket.data;
     if(!roomId) return;
-    rooms[roomId].gameData = data;
-    io.to(roomId).emit("updateGame", data);
+    const room = rooms[roomId];
+    if(room.players.length < 2) return;
+
+    // Initialize new gameData for this room only
+    const scores = {};
+    room.players.forEach(p => scores[p] = 0);
+    room.gameData = {
+      players: room.players,
+      scores,
+      turnIndex: 0,
+      state: "setup",
+      currentCard: null,
+      history: [],
+      guesserQueue: null,
+      currentGuesserIndex: null,
+      theme: room.theme
+    };
+
+    io.to(roomId).emit("updateRoom", { players: room.players, theme: room.theme, gameData: room.gameData });
+  });
+
+  socket.on("updateGameState", (gameData) => {
+    const { roomId } = socket.data;
+    if(!roomId) return;
+    if(!rooms[roomId]) return;
+
+    // Update only the gameData for this room
+    rooms[roomId].gameData = gameData;
+
+    // Broadcast updated gameData to all clients in room
+    io.to(roomId).emit("updateRoom", { players: rooms[roomId].players, theme: rooms[roomId].theme, gameData });
   });
 
   socket.on("disconnect", () => {
     const { roomId, playerName } = socket.data;
     if(roomId && rooms[roomId]){
       rooms[roomId].players = rooms[roomId].players.filter(p=>p!==playerName);
-      io.to(roomId).emit("updateGame", rooms[roomId]);
+      io.to(roomId).emit("updateRoom", { players: rooms[roomId].players, theme: rooms[roomId].theme, gameData: rooms[roomId].gameData });
     }
   });
 });
