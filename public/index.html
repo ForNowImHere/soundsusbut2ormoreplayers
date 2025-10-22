@@ -6,7 +6,7 @@
 <title>Sounds Sus 🎭 Ultra Alpha - Lobby</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
-body{background:#121212;color:#fff;font-family:Arial;text-align:center;transition:background 0.5s,color 0.5s;}
+body{background:#121212;color:#fff;font-family:Arial;text-align:center;}
 input,button,select{margin:6px;padding:8px;border-radius:8px;border:none;}
 button{background:#1e88e5;color:white;cursor:pointer;font-weight:bold;transition:all 0.2s;}
 button:hover{background:#1565c0;transform:scale(1.05);}
@@ -19,7 +19,7 @@ button:hover{background:#1565c0;transform:scale(1.05);}
 
 <div id="joinSection">
   <input id="nameInput" placeholder="Enter your name">
-  <input id="roomInput" placeholder="Room code (leave blank to create new)">
+  <input id="roomInput" placeholder="Room code (leave blank to create)">
   <button id="joinBtn">Join / Create Room</button>
 </div>
 
@@ -46,11 +46,9 @@ const socket = io();
 let playerName = "";
 let roomId = "";
 
-// Auto-fill name
 const savedName = localStorage.getItem("playerName");
 if(savedName) document.getElementById("nameInput").value = savedName;
 
-// Join / create room
 document.getElementById("joinBtn").onclick = () => {
   playerName = document.getElementById("nameInput").value.trim() || "Player-"+Math.floor(Math.random()*1000);
   roomId = document.getElementById("roomInput").value.trim().toUpperCase() || null;
@@ -58,15 +56,14 @@ document.getElementById("joinBtn").onclick = () => {
   socket.emit("joinGame",{roomId, playerName});
 };
 
-// Lobby updates
-socket.on("roomJoined", (r)=>{
+socket.on("roomJoined", r => {
   roomId = r;
   document.getElementById("joinSection").style.display="none";
   document.getElementById("lobby").style.display="block";
   document.getElementById("roomCodeDisplay").innerText = roomId;
 });
 
-socket.on("updateGame", (data)=>{
+socket.on("updateGame", data => {
   const list = document.getElementById("playerList");
   list.innerHTML="";
   (data.players||[]).forEach(p=>{
@@ -75,18 +72,15 @@ socket.on("updateGame", (data)=>{
   document.getElementById("themeSelect").value = data.theme || "classic";
 });
 
-// Theme change
 document.getElementById("themeBtn").onclick = () => {
   const theme = document.getElementById("themeSelect").value;
   socket.emit("setTheme", theme);
 };
 
-// Start game
 document.getElementById("startBtn").onclick = () => {
-  if(!roomId) return alert("Join a room first!");
-  if(document.getElementById("playerList").children.length<2) return alert("Need 2+ players!");
-  window.location.href = `game.html?room=${roomId}&player=${encodeURIComponent(playerName)}`;
+  socket.emit("startGame",{roomId});
 };
+
 </script>
 </body>
 </html>
