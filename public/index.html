@@ -56,20 +56,27 @@ document.getElementById("joinBtn").onclick = () => {
   socket.emit("joinGame",{roomId, playerName});
 };
 
-socket.on("roomJoined", r => {
-  roomId = r;
+socket.on("roomJoined", ({ roomId:rId, theme }) => {
+  roomId = rId;
   document.getElementById("joinSection").style.display="none";
   document.getElementById("lobby").style.display="block";
   document.getElementById("roomCodeDisplay").innerText = roomId;
+  document.getElementById("themeSelect").value = theme || "classic";
 });
 
-socket.on("updateGame", data => {
+socket.on("updateRoom", ({ players, theme, gameData }) => {
   const list = document.getElementById("playerList");
   list.innerHTML="";
-  (data.players||[]).forEach(p=>{
+  (players||[]).forEach(p=>{
     const li=document.createElement("li"); li.innerText=p; list.appendChild(li);
   });
-  document.getElementById("themeSelect").value = data.theme || "classic";
+  document.getElementById("themeSelect").value = theme || "classic";
+
+  // Redirect to game.html when gameData exists
+  if(gameData){
+    const url = `game.html?room=${roomId}&player=${encodeURIComponent(playerName)}`;
+    window.location.href = url;
+  }
 });
 
 document.getElementById("themeBtn").onclick = () => {
@@ -78,9 +85,8 @@ document.getElementById("themeBtn").onclick = () => {
 };
 
 document.getElementById("startBtn").onclick = () => {
-  socket.emit("startGame",{roomId});
+  socket.emit("startGame");
 };
-
 </script>
 </body>
 </html>
