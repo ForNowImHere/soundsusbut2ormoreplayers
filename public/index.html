@@ -6,19 +6,20 @@
 <title>Sounds Sus 🎭 Ultra Alpha Multiplayer</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
-  body { background:#121212; color:#fff; font-family:Arial; text-align:center; transition:background 0.5s,color 0.5s;}
-  input,button,textarea{margin:6px;padding:8px;border-radius:8px;border:none;}
-  button{background:#1e88e5;color:white;cursor:pointer;font-weight:bold;transition:all 0.2s;}
-  button:hover{background:#1565c0;transform:scale(1.05);}
-  #game,#menu,#lobby{display:block;}
-  .card-container{perspective:1000px;display:inline-block;margin:20px auto 60px auto;}
-  .card{background:#111;border-radius:12px;padding:12px;min-width:250px;min-height:150px;transform-style:preserve-3d;transition:transform 0.8s;margin:auto;z-index:1;}
-  .card .front,.card .back{position:absolute;width:100%;height:100%;backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:12px;}
-  .card .back{background:#222;color:#fff;transform:rotateY(0deg);font-size:1.2em;}
-  .card .front{transform:rotateY(180deg);background:#333;color:#fff;font-size:1em;padding:10px;}
-  .card.flipped{transform:rotateY(-180deg);}
-  .history{background:#222;padding:8px;border-radius:8px;margin-top:10px;max-height:200px;overflow-y:auto;text-align:left;}
-  .history-entry{border-bottom:1px solid #333;padding:4px;}
+body { background:#121212; color:#fff; font-family:Arial; text-align:center; transition:background 0.5s,color 0.5s;}
+input,button,textarea{margin:6px;padding:8px;border-radius:8px;border:none;}
+button{background:#1e88e5;color:white;cursor:pointer;font-weight:bold;transition:all 0.2s;}
+button:hover{background:#1565c0;transform:scale(1.05);}
+#game,#menu,#lobby{display:block;}
+.card-container{perspective:1000px;display:inline-block;margin:20px auto 60px auto;}
+.card{background:#111;border-radius:12px;padding:12px;min-width:250px;min-height:150px;transform-style:preserve-3d;transition:transform 0.8s;margin:auto;z-index:1;}
+.card .front,.card .back{position:absolute;width:100%;height:100%;backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:12px;}
+.card .back{background:#222;color:#fff;transform:rotateY(0deg);font-size:1.2em;}
+.card .front{transform:rotateY(180deg);background:#333;color:#fff;font-size:1em;padding:10px;}
+.card.flipped{transform:rotateY(-180deg);}
+.history{background:#222;padding:8px;border-radius:8px;margin-top:10px;max-height:200px;overflow-y:auto;text-align:left;}
+.history-entry{border-bottom:1px solid #333;padding:4px;}
+#notification{background:#222;padding:8px;border-radius:8px;margin:10px auto;width:300px;}
 </style>
 </head>
 <body>
@@ -63,6 +64,8 @@
     </div>
   </div>
 
+  <div id="notification"></div>
+
   <h3>Scores</h3>
   <div id="scores"></div>
 
@@ -78,6 +81,11 @@ const socket = io();
 let roomId = null;
 let playerName = null;
 let gameData = { players: [], scores:{}, turnIndex:0, state:"setup", currentCard:null, history:[], guesserQueue:null, currentGuesserIndex:null, theme:"classic"};
+const randomPacks = [
+  {q:"Most sus fruit?", a:"Banana", f1:"Potato", f2:"Cucumber"},
+  {q:"Who invented lying?", a:"Your friend", f1:"Newton", f2:"Elon Musk"},
+  {q:"Most likely to say 'Trust me bro'?", a:"Imposter", f1:"Cat", f2:"Politician"}
+];
 
 // Auto-fill name
 const savedName = localStorage.getItem("playerName");
@@ -122,12 +130,6 @@ document.getElementById("startBtn").onclick = () => {
 };
 
 // ------------------ Card Logic ------------------
-const randomPacks = [
-  {q:"Most sus fruit?", a:"Banana", f1:"Potato", f2:"Cucumber"},
-  {q:"Who invented lying?", a:"Your friend", f1:"Newton", f2:"Elon Musk"},
-  {q:"Most likely to say 'Trust me bro'?", a:"Imposter", f1:"Cat", f2:"Politician"}
-];
-
 function drawRandomCard(){
   const r=randomPacks[Math.floor(Math.random()*randomPacks.length)];
   document.getElementById("questionInput").value=r.q;
@@ -141,7 +143,7 @@ function prepareCard(){
   const correct=document.getElementById("answerInput").value.trim();
   const f1=document.getElementById("fake1").value.trim();
   const f2=document.getElementById("fake2").value.trim();
-  if(!q||!correct||!f1||!f2) return alert("Fill all fields!");
+  if(!q||!correct||!f1||!f2) return showNotification("Fill all fields!");
 
   let options=[{text:correct,correct:true},{text:f1,correct:false},{text:f2,correct:false}].sort(()=>Math.random()-0.5);
   const letters=["A","B","C"];
@@ -168,34 +170,34 @@ function prepareCard(){
   });
   document.getElementById("questionText").innerText=q;
 
-  const correctLetter=options.find(o=>o.correct).letter;
-  alert(`(Carder sees) Correct answer: ${correctLetter}`);
+  const correctLetter = options.find(o=>o.correct).letter;
+  showNotification(`(Carder sees) Correct answer: ${correctLetter}`);
 }
 
-// Guess handling
+// ------------------ Guess Handling ------------------
 function handleGuess(isCorrect){
-  const carderIndex=gameData.turnIndex%gameData.players.length;
-  const carder=gameData.players[carderIndex];
-  const guesser=gameData.guesserQueue[gameData.currentGuesserIndex];
+  const carderIndex = gameData.turnIndex % gameData.players.length;
+  const carder = gameData.players[carderIndex];
+  const guesser = gameData.guesserQueue[gameData.currentGuesserIndex];
 
-  let result="";
-  if(isCorrect){ gameData.scores[guesser]+=1; result=`${guesser} guessed correctly!`; }
-  else { gameData.scores[carder]+=1; result=`${guesser} guessed wrong! Point to ${carder}!`; }
+  let result = "";
+  if(isCorrect){ gameData.scores[guesser] +=1; result = `${guesser} guessed correctly!`; }
+  else { gameData.scores[carder] +=1; result = `${guesser} guessed wrong! Point to ${carder}!`; }
 
   gameData.history.push({q:gameData.currentCard.question, carder, guesser, result});
   gameData.currentGuesserIndex++;
 
-  if(gameData.currentGuesserIndex>=gameData.guesserQueue.length){
+  if(gameData.currentGuesserIndex >= gameData.guesserQueue.length){
     gameData.turnIndex++; gameData.state="setup"; gameData.currentCard=null;
     gameData.guesserQueue=null; gameData.currentGuesserIndex=null;
-    alert("Round over! Next carder will start.");
-  } else { alert(result); }
+    showNotification("Round over! Next carder will start.");
+  } else { showNotification(result); }
 
   socket.emit("updateGameState", gameData);
   updateUI();
 }
 
-// UI update
+// ------------------ UI ------------------
 function updateUI(){
   const carder=gameData.players[gameData.turnIndex % gameData.players.length];
   document.getElementById("turnInfo").innerText=gameData.state==="setup" ? `${carder}'s Turn - Create a Card` : `${carder}'s Card`;
@@ -217,10 +219,16 @@ function updateUI(){
   });
 }
 
+// Notification helper
+function showNotification(msg){
+  document.getElementById("notification").innerText = msg;
+}
+
 function returnToMenu(){
   document.getElementById("menu").style.display="block";
   document.getElementById("game").style.display="none";
 }
 </script>
+
 </body>
 </html>
