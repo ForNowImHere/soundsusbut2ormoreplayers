@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sounds Sus 🎭 Ultra Alpha (Online)</title>
+<style>
+body {
+  background:#121212; color:#fff; font-family:Arial; text-align:center;
+  transition:background 0.5s, color 0.5s;
+}
+input, button, textarea { margin:6px; padding:8px; border-radius:8px; border:none; }
+button {
+  background:#1e88e5; color:white; cursor:pointer; font-weight:bold;
+  transition: all 0.2s;
+}
+button:hover { background:#1565c0; transform:scale(1.05); }
+.card-container { perspective:1000px; display:inline-block; margin:20px auto 60px auto; }
+.card {
+  background:#111; border-radius:12px; padding:12px; min-width:250px; min-height:150px;
+  transform-style:preserve-3d; transition:transform 0.8s; margin:auto; z-index:1;
+}
+.card .front, .card .back {
+  position:absolute; width:100%; height:100%; backface-visibility:hidden;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  border-radius:12px;
+}
+.card .back { background:#222; transform:rotateY(0deg); }
+.card .front { transform:rotateY(180deg); background:#333; }
+.card.flipped { transform:rotateY(-180deg); }
+.history { background:#222; padding:8px; border-radius:8px; margin-top:10px; max-height:200px; overflow-y:auto; text-align:left; }
+.history-entry { border-bottom:1px solid #333; padding:4px; }
+.save-list { margin:10px auto; width:300px; background:#222; border-radius:8px; padding:10px; }
+</style>
+</head>
+<body>
+
+<h1>Sounds Sus 🎭 <span id="themeName">(Classic)</span></h1>
+<h3 id="roomCode">Room Code: ???</h3>
+
+<div id="menu">
+  <h2>Start or Continue</h2>
+  <textarea id="playerNames" placeholder="Enter player names separated by commas"></textarea><br>
+  <div>
+    <button onclick="setTheme('classic')">🎴 Classic</button>
+    <button onclick="setTheme('spooky')">🎃 Spooky</button>
+    <button onclick="setTheme('retro')">🕹️ Retro</button>
+    <button onclick="setTheme('neon')">💡 Neon</button>
+  </div>
+  <button onclick="startNewGame()">Start New Game</button>
+</div>
+
+<div id="game" style="display:none;">
+  <h2 id="turnInfo"></h2>
+
+  <div id="cardSetup">
+    <textarea id="questionInput" placeholder="Enter question"></textarea>
