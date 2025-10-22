@@ -6,8 +6,8 @@
 <title>Sounds Sus 🎭 Ultra Alpha - Game</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
-body{background:#121212;color:#fff;font-family:Arial;text-align:center;}
-textarea,button{margin:6px;padding:8px;border-radius:8px;border:none;}
+body{background:#121212;color:#fff;font-family:Arial;text-align:center;transition:background 0.5s,color 0.5s;}
+textarea,button,select{margin:6px;padding:8px;border-radius:8px;border:none;}
 button{background:#1e88e5;color:white;cursor:pointer;font-weight:bold;transition:all 0.2s;}
 button:hover{background:#1565c0;transform:scale(1.05);}
 .card-container{perspective:1000px;display:inline-block;margin:20px auto 60px auto;}
@@ -19,6 +19,7 @@ button:hover{background:#1565c0;transform:scale(1.05);}
 .history{background:#222;padding:8px;border-radius:8px;margin-top:10px;max-height:200px;overflow-y:auto;text-align:left;}
 .history-entry{border-bottom:1px solid #333;padding:4px;}
 #notification{background:#222;padding:8px;border-radius:8px;margin:10px auto;width:300px;}
+#cardSetup,#questionScreen{margin-top:20px;}
 </style>
 </head>
 <body>
@@ -59,22 +60,27 @@ button:hover{background:#1565c0;transform:scale(1.05);}
 <script>
 const socket = io();
 const urlParams = new URLSearchParams(window.location.search);
-let roomId = urlParams.get("room");
-let playerName = urlParams.get("player");
+const roomId = urlParams.get("room");
+const playerName = urlParams.get("player");
 let gameData = { players:[], scores:{}, turnIndex:0, state:"setup", currentCard:null, history:[], guesserQueue:null, currentGuesserIndex:null, theme:"classic" };
 
 const randomPacks = [
   {q:"Most sus fruit?", a:"Banana", f1:"Potato", f2:"Cucumber"},
   {q:"Who invented lying?", a:"Your friend", f1:"Newton", f2:"Elon Musk"},
-  {q:"Most likely to say 'Trust me bro'?", a:"Imposter", f1:"Cat", f2:"Politician"}
+  {q:"Most likely to say 'Trust me bro'?", a:"Imposter", f1:"Cat", f2:"Politician"},
+  {q:"If aliens landed, what would they first steal?", a:"WiFi", f1:"Toilet paper", f2:"Cats"},
+  {q:"Best way to hide evidence?", a:"Eat it", f1:"Burn it", f2:"Ignore it"}
 ];
 
 socket.emit("joinGame",{roomId, playerName});
 
-socket.on("updateGame", data=>{
-  gameData = data.gameData || data;
+socket.on("updateRoom", ({ players, theme, gameData: gData })=>{
+  gameData = gData || gameData;
+  gameData.players = players || gameData.players;
+  gameData.theme = theme || gameData.theme;
+
+  document.getElementById("themeName").innerText = `(${gameData.theme})`;
   updateUI();
-  document.getElementById("themeName").innerText = `(${data.theme||"Default"})`;
 
   const cardDiv = document.getElementById("cardFrontBack");
   if(gameData.state==="question") cardDiv.classList.add("flipped");
@@ -112,10 +118,12 @@ function prepareCard(){
     btn.onclick=()=>handleGuess(opt.correct);
     optDiv.appendChild(btn); optDiv.appendChild(document.createElement("br"));
   });
-  document.getElementById("questionText").innerText=q;
 
-  const correctLetter = options.find(o=>o.correct).letter;
-  showNotification(`(Carder sees) Correct answer: ${correctLetter}`);
+  document.getElementById("questionText").innerText=q;
+  showNotification(`(Carder sees) Correct answer: ${options.find(o=>o.correct).letter}`);
+
+  // Auto-flip card for everyone
+  document.getElementById("cardFrontBack").classList.add("flipped");
 
   socket.emit("updateGameState", gameData);
 }
@@ -161,7 +169,7 @@ function updateUI(){
 }
 
 function showNotification(msg){ document.getElementById("notification").innerText=msg; }
-
 </script>
+
 </body>
 </html>
