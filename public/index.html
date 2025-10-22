@@ -54,4 +54,162 @@ button:hover { background:#1565c0; transform:scale(1.05); }
   <h2 id="turnInfo"></h2>
 
   <div id="cardSetup">
-    <textarea id="questionInput" placeholder="Enter question"></textarea>
+    <textarea id="questionInput" placeholder="Enter question"></textarea><br>
+    <textarea id="answerInput" placeholder="Enter correct answer"></textarea><br>
+    <textarea id="fake1" placeholder="Fake answer 1"></textarea><br>
+    <textarea id="fake2" placeholder="Fake answer 2"></textarea><br>
+    <button onclick="prepareCard()">Confirm Card</button>
+    <button onclick="drawRandomCard()">🎲 Draw Random Card</button>
+  </div>
+
+  <div id="questionScreen" class="card-container">
+    <div class="card" id="cardFrontBack">
+      <div class="front">
+        <h3 id="questionText"></h3>
+        <div id="options"></div>
+      </div>
+      <div class="back">
+        <h3>🂠 Card</h3>
+        <p>Turn to reveal the question!</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Scores</h3>
+  <div id="scores"></div>
+
+  <h3>Round History</h3>
+  <div class="history" id="history"></div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+let roomId = null;
+let playerName = prompt("Enter your name:") || "Player-" + Math.floor(Math.random()*1000);
+let gameData = {
+  players: [], scores: {}, turnIndex: 0, state:"setup", currentCard:null, theme:"classic", history:[], guesserQueue:null, currentGuesserIndex:null
+};
+
+// Join or create a room (auto-random for now)
+socket.emit("joinGame", { roomId: null, playerName });
+
+// Server assigns final room code
+socket.on("roomJoined", (code) => {
+  roomId = code;
+  document.getElementById("roomCode").innerText = "Room Code: " + code;
+  alert("🎟️ Share this room code with friends: " + code);
+});
+
+socket.on("updateGame", (data) => {
+  gameData = data;
+  updateUI();
+});
+
+function syncGame() {
+  socket.emit("updateGameState", gameData);
+}
+
+// --- Game Logic ---
+function setTheme(theme){
+  const body=document.body;
+  const themeName=document.getElementById("themeName");
+  gameData.theme=theme;
+  if(theme==="spooky"){body.style.background="#1a0000"; body.style.color="#ff6666"; themeName.textContent="🎃 Spooky";}
+  else if(theme==="retro"){body.style.background="#000"; body.style.color="#00ff99"; themeName.textContent="🕹️ Retro";}
+  else if(theme==="neon"){body.style.background="#0f001f"; body.style.color="#39ff14"; themeName.textContent="💡 Neon";}
+  else{body.style.background="#121212"; body.style.color="#fff"; themeName.textContent="🎴 Classic";}
+  syncGame();
+}
+
+function startNewGame(){
+  const names=document.getElementById("playerNames").value.split(",").map(n=>n.trim()).filter(Boolean);
+  if(names.length<2) return alert("Need at least 2 players!");
+  gameData={players:names,scores:{},turnIndex:0,state:"setup",currentCard:null,theme:gameData.theme,history:[],guesserQueue:null,currentGuesserIndex:null};
+  names.forEach(p=>gameData.scores[p]=0);
+  document.getElementById("menu").style.display="none";
+  document.getElementById("game").style.display="block";
+  updateUI();
+  syncGame();
+}
+
+function updateUI(){
+  const carder=gameData.players[gameData.turnIndex % gameData.players.length];
+  document.getElementById("turnInfo").innerText = gameData.state==="setup" ? `${carder}'s Turn - Create a Card` : `${carder}'s Card`;
+  document.getElementById("cardSetup").style.display = gameData.state==="setup" ? "block" : "none";
+  document.getElementById("questionScreen").style.display = gameData.state==="question" ? "block" : "none";
+  let scoreHtml=""; for(let [name,score] of Object.entries(gameData.scores)) scoreHtml+=`${name}: ${score}<br>`;
+  document.getElementById("scores").innerHTML=scoreHtml;
+  const historyDiv=document.getElementById("history");
+  historyDiv.innerHTML="";
+  gameData.history.slice(-10).forEach(h=>{
+    const div=document.createElement("div");
+    div.className="history-entry";
+    div.innerHTML=`<b>${h.q}</b><br>Carder: ${h.carder}, Guesser: ${h.guesser}<br><i>${h.result}</i>`;
+    historyDiv.appendChild(div);
+  });
+}
+
+const randomPacks=[
+  {q:"What’s the most sus fruit?",a:"Banana",f1:"Potato",f2:"Cucumber"},
+  {q:"Who invented lying?",a:"Your friend",f1:"Newton",f2:"Elon Musk"},
+  {q:"What’s most likely to say 'Trust me bro'?",a:"Imposter",f1:"Cat",f2:"Politician"},
+  {q:"If aliens landed, what would they first steal?",a:"WiFi",f1:"Toilet paper",f2:"Cats"},
+  {q:"Best way to hide evidence?",a:"Eat it",f1:"Burn it",f2:"Ignore it"}
+];
+
+function drawRandomCard(){
+  const r=randomPacks[Math.floor(Math.random()*randomPacks.length)];
+  document.getElementById("questionInput").value=r.q;
+  document.getElementById("answerInput").value=r.a;
+  document.getElementById("fake1").value=r.f1;
+  document.getElementById("fake2").value=r.f2;
+}
+
+function prepareCard(){
+  const q=document.getElementById("questionInput").value.trim();
+  const correct=document.getElementById("answerInput").value.trim();
+  const fake1=document.getElementById("fake1").value.trim();
+  const fake2=document.getElementById("fake2").value.trim();
+  if(!q||!correct||!fake1||!fake2) return alert("Fill all fields!");
+  let options=[{text:correct,correct:true},{text:fake1,correct:false},{text:fake2,correct:false}].sort(()=>Math.random()-0.5);
+  const letters=["A","B","C"]; options.forEach((opt,i)=>opt.letter=letters[i]);
+  gameData.currentCard={question:q,options};
+  gameData.state="question";
+  gameData.guesserQueue=gameData.players.filter((p,i)=>i!==gameData.turnIndex%gameData.players.length);
+  gameData.currentGuesserIndex=0;
+  syncGame();
+  updateUI();
+  const cardDiv=document.getElementById("cardFrontBack"); cardDiv.classList.remove("flipped");
+  setTimeout(()=>cardDiv.classList.add("flipped"),200);
+  const optDiv=document.getElementById("options"); optDiv.innerHTML="";
+  options.forEach(opt=>{
+    const btn=document.createElement("button");
+    btn.innerText=`${opt.letter}: ${opt.text}`;
+    btn.onclick=()=>handleGuess(opt.correct);
+    optDiv.appendChild(btn); optDiv.appendChild(document.createElement("br"));
+  });
+  document.getElementById("questionText").innerText=q;
+  const correctLetter = options.find(o=>o.correct).letter;
+  alert(`(Carder sees) Correct answer: ${correctLetter}`);
+}
+
+function handleGuess(isCorrect){
+  const carderIndex=gameData.turnIndex%gameData.players.length;
+  const carder=gameData.players[carderIndex];
+  const guesser=gameData.guesserQueue[gameData.currentGuesserIndex];
+  let result="";
+  if(isCorrect){ gameData.scores[guesser]+=1; result=`${guesser} guessed correctly!`; }
+  else { gameData.scores[carder]+=1; result=`${guesser} guessed wrong! Point to ${carder}!`; }
+  gameData.history.push({q:gameData.currentCard.question, carder, guesser, result});
+  gameData.currentGuesserIndex++;
+  if(gameData.currentGuesserIndex>=gameData.guesserQueue.length){
+    gameData.turnIndex++; gameData.state="setup"; gameData.currentCard=null;
+    gameData.guesserQueue=null; gameData.currentGuesserIndex=null;
+    alert("Round over! Next carder will start.");
+  } else { alert(result); }
+  syncGame(); updateUI();
+}
+</script>
+</body>
+</html>
