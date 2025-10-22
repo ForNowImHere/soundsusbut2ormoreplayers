@@ -27,15 +27,17 @@ button:hover{background:#1565c0;transform:scale(1.05);}
 <h1>Sounds Sus 🎭 <span id="themeName">(Default)</span></h1>
 <h2 id="turnInfo"></h2>
 
+<!-- Only carder can see/edit this -->
 <div id="cardSetup">
 <textarea id="questionInput" placeholder="Enter question"></textarea><br>
 <textarea id="answerInput" placeholder="Enter correct answer"></textarea><br>
 <textarea id="fake1" placeholder="Fake answer 1"></textarea><br>
 <textarea id="fake2" placeholder="Fake answer 2"></textarea><br>
-<button onclick="prepareCard()">Confirm Card</button>
+<button id="confirmCardBtn">Confirm Card</button>
 <button onclick="drawRandomCard()">🎲 Draw Random Card</button>
 </div>
 
+<!-- All players see this card display -->
 <div id="questionScreen" class="card-container">
 <div class="card" id="cardFrontBack">
   <div class="front">
@@ -64,6 +66,7 @@ const roomId = urlParams.get("room");
 const playerName = urlParams.get("player");
 let gameData = { players:[], scores:{}, turnIndex:0, state:"setup", currentCard:null, history:[], guesserQueue:null, currentGuesserIndex:null, theme:"classic" };
 
+// Predefined cards for random draw
 const randomPacks = [
   {q:"Most sus fruit?", a:"Banana", f1:"Potato", f2:"Cucumber"},
   {q:"Who invented lying?", a:"Your friend", f1:"Newton", f2:"Elon Musk"},
@@ -72,8 +75,10 @@ const randomPacks = [
   {q:"Best way to hide evidence?", a:"Eat it", f1:"Burn it", f2:"Ignore it"}
 ];
 
+// Join room
 socket.emit("joinGame",{roomId, playerName});
 
+// Update UI when room/game state changes
 socket.on("updateRoom", ({ players, theme, gameData: gData })=>{
   gameData = gData || gameData;
   gameData.players = players || gameData.players;
@@ -81,11 +86,16 @@ socket.on("updateRoom", ({ players, theme, gameData: gData })=>{
 
   document.getElementById("themeName").innerText = `(${gameData.theme})`;
   updateUI();
-
-  const cardDiv = document.getElementById("cardFrontBack");
-  if(gameData.state==="question") cardDiv.classList.add("flipped");
-  else cardDiv.classList.remove("flipped");
 });
+
+// Only carder can confirm card
+document.getElementById("confirmCardBtn").onclick = ()=> {
+  if(playerName !== gameData.players[gameData.turnIndex%gameData.players.length]){
+    showNotification("Only the carder can submit this card!");
+    return;
+  }
+  prepareCard();
+};
 
 function drawRandomCard(){
   const r = randomPacks[Math.floor(Math.random()*randomPacks.length)];
@@ -110,25 +120,14 @@ function prepareCard(){
   gameData.guesserQueue=gameData.players.filter(p=>p!==gameData.players[gameData.turnIndex%gameData.players.length]);
   gameData.currentGuesserIndex=0;
 
-  const optDiv=document.getElementById("options");
-  optDiv.innerHTML="";
-
-  // Show all options to everyone; carder sees correct
-  options.forEach(opt=>{
-    const btn=document.createElement("button");
-    btn.innerText=`${opt.letter}: ${opt.text}`;
-    if(playerName===gameData.players[gameData.turnIndex%gameData.players.length]){
-      btn.style.background = opt.correct ? "#4caf50" : "#1e88e5"; // correct highlighted for carder
-    } else {
-      btn.onclick=()=>handleGuess(opt.correct); // guessers click to guess
-    }
-    optDiv.appendChild(btn); optDiv.appendChild(document.createElement("br"));
-  });
-
-  document.getElementById("questionText").innerText=q;
-  document.getElementById("cardFrontBack").classList.add("flipped");
-
+  // Send card data to everyone via server
   socket.emit("updateGameState", gameData);
+
+  // Clear input fields for carder
+  document.getElementById("questionInput").value="";
+  document.getElementById("answerInput").value="";
+  document.getElementById("fake1").value="";
+  document.getElementById("fake2").value="";
 }
 
 function handleGuess(isCorrect){
@@ -154,11 +153,30 @@ function handleGuess(isCorrect){
 }
 
 function updateUI(){
-  const carder=gameData.players[gameData.turnIndex%gameData.players.length]||"Waiting...";
-  document.getElementById("turnInfo").innerText = gameData.state==="setup" ? `${carder}'s Turn - Create a Card` : `${carder}'s Card`;
+  const carderName=gameData.players[gameData.turnIndex%gameData.players.length]||"Waiting...";
+  const isCarder = playerName === carderName;
 
-  document.getElementById("cardSetup").style.display = gameData.state==="setup"?"block":"none";
-  document.getElementById("questionScreen").style.display = gameData.state==="question"?"block":"none";
+  document.getElementById("turnInfo").innerText = gameData.state==="setup" ? `${carderName}'s Turn - Create a Card` : `${carderName}'s Card`;
+  document.getElementById("cardSetup").style.display = (gameData.state==="setup" && isCarder)?"block":"none";
+  document.getElementById("questionScreen").style.display = (gameData.state==="question")?"block":"none";
+
+  const optDiv=document.getElementById("options");
+  optDiv.innerHTML="";
+
+  if(gameData.currentCard){
+    document.getElementById("questionText").innerText = gameData.currentCard.question;
+    gameData.currentCard.options.forEach(opt=>{
+      const btn=document.createElement("button");
+      btn.innerText=`${opt.letter}: ${opt.text}`;
+      if(isCarder){ btn.style.background = opt.correct?"#4caf50":"#1e88e5"; } 
+      else { btn.onclick=()=>handleGuess(opt.correct); }
+      optDiv.appendChild(btn); optDiv.appendChild(document.createElement("br"));
+    });
+    document.getElementById("cardFrontBack").classList.add("flipped");
+  } else {
+    document.getElementById("cardFrontBack").classList.remove("flipped");
+    document.getElementById("questionText").innerText = "";
+  }
 
   let scoreHtml=""; for(let [name,score] of Object.entries(gameData.scores)) scoreHtml+=`${name}: ${score}<br>`;
   document.getElementById("scores").innerHTML=scoreHtml;
@@ -172,6 +190,7 @@ function updateUI(){
 }
 
 function showNotification(msg){ document.getElementById("notification").innerText=msg; }
+
 </script>
 
 </body>
