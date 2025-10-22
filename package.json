@@ -1,0 +1,22 @@
+{
+  "name": "multiplayer-room-game",
+  "version": "1.0.0",
+  "description": "A simple multiplayer game server using Express and Socket.io with random room codes",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "multiplayer",
+    "socket.io",
+    "express",
+    "rooms",
+    "game"
+  ],
+  "author": "Keenan",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.8.1"
+  }
+}
