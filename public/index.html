@@ -1,53 +1,50 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sounds Sus 🎭 Ultra Alpha (Online)</title>
+<title>Sounds Sus 🎭 Ultra Alpha Multiplayer</title>
+<script src="/socket.io/socket.io.js"></script>
 <style>
-body {
-  background:#121212; color:#fff; font-family:Arial; text-align:center;
-  transition:background 0.5s, color 0.5s;
-}
-input, button, textarea { margin:6px; padding:8px; border-radius:8px; border:none; }
-button {
-  background:#1e88e5; color:white; cursor:pointer; font-weight:bold;
-  transition: all 0.2s;
-}
-button:hover { background:#1565c0; transform:scale(1.05); }
-.card-container { perspective:1000px; display:inline-block; margin:20px auto 60px auto; }
-.card {
-  background:#111; border-radius:12px; padding:12px; min-width:250px; min-height:150px;
-  transform-style:preserve-3d; transition:transform 0.8s; margin:auto; z-index:1;
-}
-.card .front, .card .back {
-  position:absolute; width:100%; height:100%; backface-visibility:hidden;
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  border-radius:12px;
-}
-.card .back { background:#222; transform:rotateY(0deg); }
-.card .front { transform:rotateY(180deg); background:#333; }
-.card.flipped { transform:rotateY(-180deg); }
-.history { background:#222; padding:8px; border-radius:8px; margin-top:10px; max-height:200px; overflow-y:auto; text-align:left; }
-.history-entry { border-bottom:1px solid #333; padding:4px; }
-.save-list { margin:10px auto; width:300px; background:#222; border-radius:8px; padding:10px; }
+  body {
+    background:#121212;
+    color:#fff;
+    font-family:Arial;
+    text-align:center;
+    transition:background 0.5s, color 0.5s;
+  }
+  input, button, textarea {
+    margin:6px; padding:8px; border-radius:8px; border:none;
+  }
+  button {
+    background:#1e88e5; color:white; cursor:pointer; font-weight:bold; transition: all 0.2s;
+  }
+  button:hover { background:#1565c0; transform:scale(1.05);}
+  .save-list { margin:10px auto; width:300px; background:#222; border-radius:8px; padding:10px; }
+  .save-item { cursor:pointer; margin:4px; padding:6px; background:#333; border-radius:6px; transition: all 0.2s;}
+  .save-item:hover { background:#444; transform:scale(1.02);}
+  #game, #menu, #questionScreen { display:block; }
+  .card-container { perspective: 1000px; display: inline-block; margin: 20px auto 60px auto; }
+  .card { background: #111; border-radius: 12px; padding: 12px; min-width: 250px; min-height: 150px; transform-style: preserve-3d; transition: transform 0.8s; margin:auto; z-index:1;}
+  .card .front, .card .back { position:absolute; width:100%; height:100%; backface-visibility:hidden; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:12px; }
+  .card .back { background:#222; color:#fff; transform:rotateY(0deg); font-size:1.2em;}
+  .card .front { transform:rotateY(180deg); background:#333; color:#fff; font-size:1em; padding:10px;}
+  .card.flipped { transform:rotateY(-180deg);}
+  .history { background:#222; padding:8px; border-radius:8px; margin-top:10px; max-height:200px; overflow-y:auto; text-align:left; }
+  .history-entry { border-bottom:1px solid #333; padding:4px; }
 </style>
 </head>
 <body>
-
-<h1>Sounds Sus 🎭 <span id="themeName">(Classic)</span></h1>
-<h3 id="roomCode">Room Code: ???</h3>
+<h1>Sounds Sus 🎭 <span id="themeName">(Default)</span></h1>
 
 <div id="menu">
-  <h2>Start or Continue</h2>
-  <textarea id="playerNames" placeholder="Enter player names separated by commas"></textarea><br>
-  <div>
-    <button onclick="setTheme('classic')">🎴 Classic</button>
-    <button onclick="setTheme('spooky')">🎃 Spooky</button>
-    <button onclick="setTheme('retro')">🕹️ Retro</button>
-    <button onclick="setTheme('neon')">💡 Neon</button>
-  </div>
-  <button onclick="startNewGame()">Start New Game</button>
+  <h2>Join or Create Room</h2>
+  <input id="nameInput" placeholder="Enter your name">
+  <input id="roomInput" placeholder="Room code (leave blank to create new)">
+  <button id="joinBtn">Join Room</button>
+
+  <h3>Saved Games</h3>
+  <div class="save-list" id="saveList"></div>
 </div>
 
 <div id="game" style="display:none;">
@@ -80,86 +77,51 @@ button:hover { background:#1565c0; transform:scale(1.05); }
 
   <h3>Round History</h3>
   <div class="history" id="history"></div>
+
+  <br>
+  <button onclick="returnToMenu()">🏠 Return to Menu</button>
 </div>
 
-<script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
+
+// ---------- Multiplayer room setup ----------
 let roomId = null;
-let playerName = prompt("Enter your name:") || "Player-" + Math.floor(Math.random()*1000);
-let gameData = {
-  players: [], scores: {}, turnIndex: 0, state:"setup", currentCard:null, theme:"classic", history:[], guesserQueue:null, currentGuesserIndex:null
+let playerName = null;
+let gameData = { players: [], scores:{}, turnIndex:0, state:"setup", currentCard:null, history:[], guesserQueue:null, currentGuesserIndex:null, theme:"classic" };
+
+// Auto-fill name
+const savedName = localStorage.getItem("playerName");
+if(savedName) document.getElementById("nameInput").value = savedName;
+
+document.getElementById("joinBtn").onclick = () => {
+  playerName = document.getElementById("nameInput").value.trim() || "Player-" + Math.floor(Math.random()*1000);
+  roomId = document.getElementById("roomInput").value.trim().toUpperCase() || null;
+  localStorage.setItem("playerName", playerName);
+  socket.emit("joinGame",{roomId, playerName});
 };
 
-// Join or create a room (auto-random for now)
-socket.emit("joinGame", { roomId: null, playerName });
-
-// Server assigns final room code
-socket.on("roomJoined", (code) => {
-  roomId = code;
-  document.getElementById("roomCode").innerText = "Room Code: " + code;
-  alert("🎟️ Share this room code with friends: " + code);
+socket.on("roomJoined",(r)=>{
+  roomId = r;
+  document.getElementById("menu").style.display="none";
+  document.getElementById("game").style.display="block";
+  document.getElementById("roomInput").value = roomId;
 });
 
-socket.on("updateGame", (data) => {
+socket.on("updateGame",(data)=>{
   gameData = data;
   updateUI();
 });
 
-function syncGame() {
-  socket.emit("updateGameState", gameData);
-}
-
-// --- Game Logic ---
-function setTheme(theme){
-  const body=document.body;
-  const themeName=document.getElementById("themeName");
-  gameData.theme=theme;
-  if(theme==="spooky"){body.style.background="#1a0000"; body.style.color="#ff6666"; themeName.textContent="🎃 Spooky";}
-  else if(theme==="retro"){body.style.background="#000"; body.style.color="#00ff99"; themeName.textContent="🕹️ Retro";}
-  else if(theme==="neon"){body.style.background="#0f001f"; body.style.color="#39ff14"; themeName.textContent="💡 Neon";}
-  else{body.style.background="#121212"; body.style.color="#fff"; themeName.textContent="🎴 Classic";}
-  syncGame();
-}
-
-function startNewGame(){
-  const names=document.getElementById("playerNames").value.split(",").map(n=>n.trim()).filter(Boolean);
-  if(names.length<2) return alert("Need at least 2 players!");
-  gameData={players:names,scores:{},turnIndex:0,state:"setup",currentCard:null,theme:gameData.theme,history:[],guesserQueue:null,currentGuesserIndex:null};
-  names.forEach(p=>gameData.scores[p]=0);
-  document.getElementById("menu").style.display="none";
-  document.getElementById("game").style.display="block";
-  updateUI();
-  syncGame();
-}
-
-function updateUI(){
-  const carder=gameData.players[gameData.turnIndex % gameData.players.length];
-  document.getElementById("turnInfo").innerText = gameData.state==="setup" ? `${carder}'s Turn - Create a Card` : `${carder}'s Card`;
-  document.getElementById("cardSetup").style.display = gameData.state==="setup" ? "block" : "none";
-  document.getElementById("questionScreen").style.display = gameData.state==="question" ? "block" : "none";
-  let scoreHtml=""; for(let [name,score] of Object.entries(gameData.scores)) scoreHtml+=`${name}: ${score}<br>`;
-  document.getElementById("scores").innerHTML=scoreHtml;
-  const historyDiv=document.getElementById("history");
-  historyDiv.innerHTML="";
-  gameData.history.slice(-10).forEach(h=>{
-    const div=document.createElement("div");
-    div.className="history-entry";
-    div.innerHTML=`<b>${h.q}</b><br>Carder: ${h.carder}, Guesser: ${h.guesser}<br><i>${h.result}</i>`;
-    historyDiv.appendChild(div);
-  });
-}
-
-const randomPacks=[
-  {q:"What’s the most sus fruit?",a:"Banana",f1:"Potato",f2:"Cucumber"},
-  {q:"Who invented lying?",a:"Your friend",f1:"Newton",f2:"Elon Musk"},
-  {q:"What’s most likely to say 'Trust me bro'?",a:"Imposter",f1:"Cat",f2:"Politician"},
-  {q:"If aliens landed, what would they first steal?",a:"WiFi",f1:"Toilet paper",f2:"Cats"},
-  {q:"Best way to hide evidence?",a:"Eat it",f1:"Burn it",f2:"Ignore it"}
+// ---------- Card logic ----------
+const randomPacks = [
+  {q:"Most sus fruit?", a:"Banana", f1:"Potato", f2:"Cucumber"},
+  {q:"Who invented lying?", a:"Your friend", f1:"Newton", f2:"Elon Musk"},
+  {q:"Most likely to say 'Trust me bro'?", a:"Imposter", f1:"Cat", f2:"Politician"}
 ];
 
 function drawRandomCard(){
-  const r=randomPacks[Math.floor(Math.random()*randomPacks.length)];
+  const r = randomPacks[Math.floor(Math.random()*randomPacks.length)];
   document.getElementById("questionInput").value=r.q;
   document.getElementById("answerInput").value=r.a;
   document.getElementById("fake1").value=r.f1;
@@ -169,47 +131,95 @@ function drawRandomCard(){
 function prepareCard(){
   const q=document.getElementById("questionInput").value.trim();
   const correct=document.getElementById("answerInput").value.trim();
-  const fake1=document.getElementById("fake1").value.trim();
-  const fake2=document.getElementById("fake2").value.trim();
-  if(!q||!correct||!fake1||!fake2) return alert("Fill all fields!");
-  let options=[{text:correct,correct:true},{text:fake1,correct:false},{text:fake2,correct:false}].sort(()=>Math.random()-0.5);
-  const letters=["A","B","C"]; options.forEach((opt,i)=>opt.letter=letters[i]);
+  const f1=document.getElementById("fake1").value.trim();
+  const f2=document.getElementById("fake2").value.trim();
+  if(!q||!correct||!f1||!f2) return alert("Fill all fields!");
+
+  let options = [{text:correct,correct:true},{text:f1,correct:false},{text:f2,correct:false}].sort(()=>Math.random()-0.5);
+  const letters = ["A","B","C"];
+  options.forEach((opt,i)=>opt.letter=letters[i]);
+
   gameData.currentCard={question:q,options};
   gameData.state="question";
-  gameData.guesserQueue=gameData.players.filter((p,i)=>i!==gameData.turnIndex%gameData.players.length);
+  gameData.guesserQueue = gameData.players.filter((p,i)=>i!==gameData.turnIndex%gameData.players.length);
   gameData.currentGuesserIndex=0;
-  syncGame();
-  updateUI();
-  const cardDiv=document.getElementById("cardFrontBack"); cardDiv.classList.remove("flipped");
+
+  // Card flip
+  const cardDiv = document.getElementById("cardFrontBack");
+  cardDiv.classList.remove("flipped");
   setTimeout(()=>cardDiv.classList.add("flipped"),200);
-  const optDiv=document.getElementById("options"); optDiv.innerHTML="";
+
+  const optDiv = document.getElementById("options");
+  optDiv.innerHTML="";
   options.forEach(opt=>{
-    const btn=document.createElement("button");
+    const btn = document.createElement("button");
     btn.innerText=`${opt.letter}: ${opt.text}`;
     btn.onclick=()=>handleGuess(opt.correct);
-    optDiv.appendChild(btn); optDiv.appendChild(document.createElement("br"));
+    optDiv.appendChild(btn);
+    optDiv.appendChild(document.createElement("br"));
   });
-  document.getElementById("questionText").innerText=q;
+
+  document.getElementById("questionText").innerText = q;
   const correctLetter = options.find(o=>o.correct).letter;
   alert(`(Carder sees) Correct answer: ${correctLetter}`);
+
+  socket.emit("updateGameState", gameData);
 }
 
+// ---------- Guess Handling ----------
 function handleGuess(isCorrect){
-  const carderIndex=gameData.turnIndex%gameData.players.length;
-  const carder=gameData.players[carderIndex];
-  const guesser=gameData.guesserQueue[gameData.currentGuesserIndex];
+  const carderIndex = gameData.turnIndex%gameData.players.length;
+  const carder = gameData.players[carderIndex];
+  const guesser = gameData.guesserQueue[gameData.currentGuesserIndex];
+
   let result="";
-  if(isCorrect){ gameData.scores[guesser]+=1; result=`${guesser} guessed correctly!`; }
-  else { gameData.scores[carder]+=1; result=`${guesser} guessed wrong! Point to ${carder}!`; }
+  if(isCorrect){
+    gameData.scores[guesser]+=1;
+    result=`${guesser} guessed correctly!`;
+  } else {
+    gameData.scores[carder]+=1;
+    result=`${guesser} guessed wrong! Point to ${carder}!`;
+  }
+
   gameData.history.push({q:gameData.currentCard.question, carder, guesser, result});
   gameData.currentGuesserIndex++;
+
   if(gameData.currentGuesserIndex>=gameData.guesserQueue.length){
     gameData.turnIndex++; gameData.state="setup"; gameData.currentCard=null;
     gameData.guesserQueue=null; gameData.currentGuesserIndex=null;
-    alert("Round over! Next carder will start.");
+    alert("Round over! Next carder starts.");
   } else { alert(result); }
-  syncGame(); updateUI();
+
+  socket.emit("updateGameState", gameData);
+  updateUI();
 }
+
+// ---------- UI ----------
+function updateUI(){
+  const carder = gameData.players[gameData.turnIndex%gameData.players.length];
+  document.getElementById("turnInfo").innerText = gameData.state==="setup" ? `${carder}'s Turn - Create Card` : `${carder}'s Card`;
+
+  document.getElementById("cardSetup").style.display = gameData.state==="setup" ? "block" : "none";
+  document.getElementById("questionScreen").style.display = gameData.state==="question" ? "block" : "none";
+
+  const scoreHtml = Object.entries(gameData.scores).map(([n,s])=>`${n}: ${s}`).join("<br>");
+  document.getElementById("scores").innerHTML = scoreHtml;
+
+  const historyDiv = document.getElementById("history");
+  historyDiv.innerHTML="";
+  gameData.history.slice(-10).forEach(h=>{
+    const div=document.createElement("div");
+    div.className="history-entry";
+    div.innerHTML=`<b>${h.q}</b><br>Carder: ${h.carder}, Guesser: ${h.guesser}<br><i>${h.result}</i>`;
+    historyDiv.appendChild(div);
+  });
+}
+
+function returnToMenu(){
+  document.getElementById("menu").style.display="block";
+  document.getElementById("game").style.display="none";
+}
+
 </script>
 </body>
 </html>
