@@ -7,19 +7,19 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+const PORT = 5000;
+const games = {}; // roomId -> game data
+
+// serve static files
 app.use(express.static(path.join(__dirname, "public")));
 
-let games = {}; // store all active rooms
-
-// Helper function to generate 6-character random room codes
 function generateRoomCode() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+  return Math.random().toString(36).substr(2, 6).toUpperCase();
 }
 
 io.on("connection", (socket) => {
-  console.log("⚡ Player connected:", socket.id);
+  console.log("🟢 Player connected:", socket.id);
 
-  // Player joins or creates a game room
   socket.on("joinGame", ({ roomId, playerName }) => {
     if (!roomId) roomId = generateRoomCode();
 
@@ -28,15 +28,11 @@ io.on("connection", (socket) => {
         players: [],
         scores: {},
         turnIndex: 0,
-        state: "setup",
-        currentCard: null,
-        history: [],
-        theme: "classic"
+        state: "waiting",
       };
     }
 
     const game = games[roomId];
-
     if (!game.players.includes(playerName)) {
       game.players.push(playerName);
       game.scores[playerName] = 0;
@@ -46,34 +42,30 @@ io.on("connection", (socket) => {
     socket.roomId = roomId;
     socket.playerName = playerName;
 
-    console.log(`🎭 ${playerName} joined room ${roomId}`);
+    console.log(`👥 ${playerName} joined room ${roomId}`);
 
-    socket.emit("roomJoined", roomId);
     io.to(roomId).emit("updateGame", game);
+    socket.emit("roomJoined", roomId);
   });
 
-  // Update full game state
-  socket.on("updateGameState", (newData) => {
+  socket.on("updateGameState", (data) => {
     const roomId = socket.roomId;
-    const game = games[roomId];
-    if (game) {
-      Object.assign(game, newData);
-      io.to(roomId).emit("updateGame", game);
+    if (roomId && games[roomId]) {
+      Object.assign(games[roomId], data);
+      io.to(roomId).emit("updateGame", games[roomId]);
     }
   });
 
-  // Handle disconnects
   socket.on("disconnect", () => {
     const { roomId, playerName } = socket;
     if (roomId && games[roomId]) {
       const game = games[roomId];
-      game.players = game.players.filter(p => p !== playerName);
+      game.players = game.players.filter((p) => p !== playerName);
       delete game.scores[playerName];
       io.to(roomId).emit("updateGame", game);
     }
-    console.log("👋 Player disconnected:", socket.id);
+    console.log("🔴 Player disconnected:", socket.id);
   });
 });
 
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`🚀 Sounds Sus server running on http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`🚀 Server running at http://localhost:${PORT}`));
