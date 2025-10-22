@@ -6,7 +6,7 @@
 <title>Sounds Sus 🎭 Ultra Alpha - Game</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
-body { background:#121212;color:#fff;font-family:Arial;text-align:center;transition:background 0.5s,color 0.5s;}
+body{background:#121212;color:#fff;font-family:Arial;text-align:center;}
 textarea,button{margin:6px;padding:8px;border-radius:8px;border:none;}
 button{background:#1e88e5;color:white;cursor:pointer;font-weight:bold;transition:all 0.2s;}
 button:hover{background:#1565c0;transform:scale(1.05);}
@@ -24,7 +24,6 @@ button:hover{background:#1565c0;transform:scale(1.05);}
 <body>
 
 <h1>Sounds Sus 🎭 <span id="themeName">(Default)</span></h1>
-
 <h2 id="turnInfo"></h2>
 
 <div id="cardSetup">
@@ -62,7 +61,8 @@ const socket = io();
 const urlParams = new URLSearchParams(window.location.search);
 let roomId = urlParams.get("room");
 let playerName = urlParams.get("player");
-let gameData = { players:[], scores:{}, turnIndex:0, state:"setup", currentCard:null, history:[], guesserQueue:null, currentGuesserIndex:null, theme:"classic"};
+let gameData = { players:[], scores:{}, turnIndex:0, state:"setup", currentCard:null, history:[], guesserQueue:null, currentGuesserIndex:null, theme:"classic" };
+
 const randomPacks = [
   {q:"Most sus fruit?", a:"Banana", f1:"Potato", f2:"Cucumber"},
   {q:"Who invented lying?", a:"Your friend", f1:"Newton", f2:"Elon Musk"},
@@ -71,14 +71,18 @@ const randomPacks = [
 
 socket.emit("joinGame",{roomId, playerName});
 
-socket.on("updateGame",(data)=>{
+socket.on("updateGame", data=>{
   gameData = data.gameData || data;
   updateUI();
   document.getElementById("themeName").innerText = `(${data.theme||"Default"})`;
+
+  const cardDiv = document.getElementById("cardFrontBack");
+  if(gameData.state==="question") cardDiv.classList.add("flipped");
+  else cardDiv.classList.remove("flipped");
 });
 
 function drawRandomCard(){
-  const r=randomPacks[Math.floor(Math.random()*randomPacks.length)];
+  const r = randomPacks[Math.floor(Math.random()*randomPacks.length)];
   document.getElementById("questionInput").value=r.q;
   document.getElementById("answerInput").value=r.a;
   document.getElementById("fake1").value=r.f1;
@@ -88,23 +92,17 @@ function drawRandomCard(){
 function prepareCard(){
   const q=document.getElementById("questionInput").value.trim();
   const correct=document.getElementById("answerInput").value.trim();
-  const f1=document.getElementById("fake1").value.trim();
-  const f2=document.getElementById("fake2").value.trim();
-  if(!q||!correct||!f1||!f2) return showNotification("Fill all fields!");
+  const fake1=document.getElementById("fake1").value.trim();
+  const fake2=document.getElementById("fake2").value.trim();
+  if(!q||!correct||!fake1||!fake2) return showNotification("Fill all fields!");
 
-  let options=[{text:correct,correct:true},{text:f1,correct:false},{text:f2,correct:false}].sort(()=>Math.random()-0.5);
-  const letters=["A","B","C"];
-  options.forEach((opt,i)=>opt.letter=letters[i]);
+  let options=[{text:correct,correct:true},{text:fake1,correct:false},{text:fake2,correct:false}].sort(()=>Math.random()-0.5);
+  const letters=["A","B","C"]; options.forEach((opt,i)=>opt.letter=letters[i]);
 
   gameData.currentCard={question:q,options};
   gameData.state="question";
-  gameData.guesserQueue=gameData.players.filter((p,i)=>i!==gameData.turnIndex%gameData.players.length);
+  gameData.guesserQueue=gameData.players.filter(p=>p!==gameData.players[gameData.turnIndex%gameData.players.length]);
   gameData.currentGuesserIndex=0;
-  socket.emit("updateGameState", gameData);
-
-  const cardDiv=document.getElementById("cardFrontBack");
-  cardDiv.classList.remove("flipped");
-  setTimeout(()=>cardDiv.classList.add("flipped"),200);
 
   const optDiv=document.getElementById("options");
   optDiv.innerHTML="";
@@ -118,39 +116,44 @@ function prepareCard(){
 
   const correctLetter = options.find(o=>o.correct).letter;
   showNotification(`(Carder sees) Correct answer: ${correctLetter}`);
+
+  socket.emit("updateGameState", gameData);
 }
 
 function handleGuess(isCorrect){
-  const carderIndex = gameData.turnIndex % gameData.players.length;
-  const carder = gameData.players[carderIndex];
-  const guesser = gameData.guesserQueue[gameData.currentGuesserIndex];
-  let result = "";
-  if(isCorrect){ gameData.scores[guesser]=(gameData.scores[guesser]||0)+1; result=`${guesser} guessed correctly!`; }
-  else{ gameData.scores[carder]=(gameData.scores[carder]||0)+1; result=`${guesser} guessed wrong! Point to ${carder}!`; }
+  const carderIndex=gameData.turnIndex%gameData.players.length;
+  const carder=gameData.players[carderIndex];
+  const guesser=gameData.guesserQueue[gameData.currentGuesserIndex];
+
+  let result="";
+  if(isCorrect){ gameData.scores[guesser]+=1; result=`${guesser} guessed correctly!`; }
+  else { gameData.scores[carder]+=1; result=`${guesser} guessed wrong! Point to ${carder}!`; }
+
   gameData.history.push({q:gameData.currentCard.question, carder, guesser, result});
   gameData.currentGuesserIndex++;
+
   if(gameData.currentGuesserIndex>=gameData.guesserQueue.length){
     gameData.turnIndex++; gameData.state="setup"; gameData.currentCard=null;
     gameData.guesserQueue=null; gameData.currentGuesserIndex=null;
     showNotification("Round over! Next carder will start.");
   } else showNotification(result);
+
   socket.emit("updateGameState", gameData);
   updateUI();
 }
 
 function updateUI(){
-  const carder=gameData.players[gameData.turnIndex%gameData.players.length]||"Waiting";
-  document.getElementById("turnInfo").innerText=gameData.state==="setup"?`${carder}'s Turn - Create a Card`:`${carder}'s Card`;
-  document.getElementById("cardSetup").style.display=gameData.state==="setup"?"block":"none";
-  document.getElementById("questionScreen").style.display=gameData.state==="question"?"block":"none";
+  const carder=gameData.players[gameData.turnIndex%gameData.players.length]||"Waiting...";
+  document.getElementById("turnInfo").innerText = gameData.state==="setup" ? `${carder}'s Turn - Create a Card` : `${carder}'s Card`;
 
-  let scoreHtml="";
-  for(let [n,s] of Object.entries(gameData.scores)) scoreHtml+=`${n}: ${s}<br>`;
+  document.getElementById("cardSetup").style.display = gameData.state==="setup"?"block":"none";
+  document.getElementById("questionScreen").style.display = gameData.state==="question"?"block":"none";
+
+  let scoreHtml=""; for(let [name,score] of Object.entries(gameData.scores)) scoreHtml+=`${name}: ${score}<br>`;
   document.getElementById("scores").innerHTML=scoreHtml;
 
-  const hist=document.getElementById("history");
-  hist.innerHTML="";
-  (gameData.history||[]).slice(-10).forEach(h=>{
+  const hist=document.getElementById("history"); hist.innerHTML="";
+  gameData.history.slice(-10).forEach(h=>{
     const div=document.createElement("div"); div.className="history-entry";
     div.innerHTML=`<b>${h.q}</b><br>Carder: ${h.carder}, Guesser: ${h.guesser}<br><i>${h.result}</i>`;
     hist.appendChild(div);
@@ -158,7 +161,7 @@ function updateUI(){
 }
 
 function showNotification(msg){ document.getElementById("notification").innerText=msg; }
-</script>
 
+</script>
 </body>
 </html>
