@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sounds Sus 🎭 Ultra Alpha</title>
+    <style>
+        body { background:#121212; color:#fff; font-family:Arial; text-align:center; transition:background 0.5s, color 0.5s; }
+        input, button, textarea { margin:6px; padding:8px; border-radius:8px; border:none; }
+        button { background:#1e88e5; color:white; cursor:pointer; font-weight:bold; transition: all 0.2s; }
+        button:hover { background:#1565c0; transform:scale(1.05); }
+        .save-list { margin:10px auto; width:300px; background:#222; border-radius:8px; padding:10px; }
+        .save-item { cursor:pointer; margin:4px; padding:6px; background:#333; border-radius:6px; transition: all 0.2s; }
+        .save-item:hover { background:#444; transform:scale(1.02); }
+        #game, #questionScreen { display:none; }
+        .card-container { perspective: 1000px; display: inline-block; margin: 20px auto 60px auto; }
+        .card { background: #111; border-radius: 12px; padding: 12px; min-width: 250px; min-height: 150px; transform-style: preserve-3d; transition: transform 0.8s; margin: auto; z-index: 1; }
+        .card .front, .card .back { position:absolute; width:100%; height:100%; backface-visibility:hidden; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:12px; }
+        .card .back { background:#222; color:#fff; transform:rotateY(0deg); font-size:1.2em;}
+        .card .front { transform:rotateY(180deg); background:#333; color:#fff; font-size:1em; padding:10px;}
+        .card.flipped { transform:rotateY(-180deg); }
+        .history { background:#222; padding:8px; border-radius:8px; margin-top:10px; max-height:200px; overflow-y:auto; text-align:left; }
+        .history-entry { border-bottom:1px solid #333; padding:4px; }
+    </style>
+</head>
+<body>
+    <h1>Sounds Sus 🎭 <span id="themeName">(Default)</span></h1>
+    <div id="menu">
+        <h2>Start or Continue</h2>
+        <textarea id="playerNames" placeholder="Enter player names separated by commas"></textarea><br>
+        <div class="theme-select">
+            <button onclick="setTheme('classic')">🎴 Classic</button>
+            <button onclick="setTheme('spooky')">🎃 Spooky</button>
+            <button onclick="setTheme('retro')">🕹️ Retro</button>
+            <button onclick="setTheme('neon')">💡 Neon</button>
+        </div>
+        <button onclick="startNewGame()">Start New Game</button>
+        <h3>Saved Games</h3>
+        <div class="save-list" id="saveList"></div>
+    </div>
+
+    <div id="game">
+        <h2 id="turnInfo"></h2>
+        <div id="cardSetup">
+            <textarea id="questionInput" placeholder="Enter question"></textarea><br>
+            <textarea id="answerInput" placeholder="Enter correct answer"></textarea><br>
+            <textarea id="fake1" placeholder="Fake answer 1"></textarea><br>
+            <textarea id="fake2" placeholder="Fake answer 2"></textarea><br>
+            <button onclick="prepareCard()">Confirm Card</button>
+            <button onclick="drawRandomCard()">🎲 Draw Random Card</button>
+        </div>
+
+        <div id="questionScreen" class="card-container">
+            <div class="card" id="cardFrontBack">
+                <div class="front">
+                    <h3 id="questionText"></h3>
+                    <div id="options"></div>
+                </div>
+                <div class="back">
+                    <h3>🂠 Card</h3>
+                    <p>Turn to reveal the question!</p>
+                </div>
+            </div>
+        </div>
+
+        <h3>Scores</h3>
+        <div id="scores"></div>
+
+        <h3>Round History</h3>
+        <div class="history" id="history"></div>
+
+        <br>
+        <button onclick="saveGame()">💾 Save Progress</button>
+        <button onclick="returnToMenu()">🏠 Return to Menu</button>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let roomId = localStorage.getItem('savedRoomId') || generateRandomRoomId();
+        const playerName = prompt("Enter your name:") || "Player-" + Math.floor(Math.random()*1000);
+
+        // Emit join game event
+        socket.emit("joinGame", { roomId, playerName });
+
+        // On room join confirmation
+        socket.on("roomJoined", (newRoomId) => {
+            roomId = newRoomId;
+            localStorage.setItem('savedRoomId', roomId); 
+            alert(`You joined room: ${roomId}. Share this room code with your friends!`);
+            updateGameUI();
+        });
+
+        function setTheme(theme) {
+            const body = document.body;
+            const themeName = document.getElementById("themeName");
+            if (theme === "spooky") { body.style.background = "#1a0000"; body.style.color = "#ff6666"; themeName.textContent = "🎃 Spooky"; }
+            else if (theme === "retro") { body.style.background = "#000"; body.style.color = "#00ff99"; themeName.textContent = "🕹️ Retro"; }
+            else if (theme === "neon") { body.style.background = "#0f001f"; body.style.color = "#39ff14"; themeName.textContent = "💡 Neon"; }
+            else { body.style.background = "#121212"; body.style.color = "#fff"; themeName.textContent = "🎴 Classic"; }
+            saveGame();
+        }
+
+        function generateRandomRoomId() {
+            return Math.random().toString(36).substr(2, 6).toUpperCase();
+        }
+
+        function updateGameUI() {
+            document.getElementById("roomCode").innerText = `Room Code: ${roomId}`;
+        }
+
+        function saveGame() { socket.emit("updateGameState", gameData); }
+
+        function startNewGame() {
+            const names = document.getElementById("playerNames").value.split(",").map(n => n.trim()).filter(Boolean);
+            if (names.length < 2) return alert("Need at least 2 players!");
+            const id = "Game-" + Date.now();
+            gameData = { players: names, scores: {}, turnIndex: 0, state: "setup", currentCard: null, id, theme: "classic", history: [], guesserQueue: null, currentGuesserIndex: null };
+            names.forEach(p => gameData.scores[p] = 0);
+            saveGame();
+            document.getElementById("menu").style.display = "none";
+            document.getElementById("game").style.display = "block";
+            updateGameUI();
+        }
+
+        function returnToMenu() {
+            saveGame();
+            document.getElementById("menu").style.display = "block";
+            document.getElementById("game").style.display = "none";
+        }
+    </script>
+</body>
+</html>
