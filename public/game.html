@@ -112,17 +112,20 @@ function prepareCard(){
 
   const optDiv=document.getElementById("options");
   optDiv.innerHTML="";
+
+  // Show all options to everyone; carder sees correct
   options.forEach(opt=>{
     const btn=document.createElement("button");
     btn.innerText=`${opt.letter}: ${opt.text}`;
-    btn.onclick=()=>handleGuess(opt.correct);
+    if(playerName===gameData.players[gameData.turnIndex%gameData.players.length]){
+      btn.style.background = opt.correct ? "#4caf50" : "#1e88e5"; // correct highlighted for carder
+    } else {
+      btn.onclick=()=>handleGuess(opt.correct); // guessers click to guess
+    }
     optDiv.appendChild(btn); optDiv.appendChild(document.createElement("br"));
   });
 
   document.getElementById("questionText").innerText=q;
-  showNotification(`(Carder sees) Correct answer: ${options.find(o=>o.correct).letter}`);
-
-  // Auto-flip card for everyone
   document.getElementById("cardFrontBack").classList.add("flipped");
 
   socket.emit("updateGameState", gameData);
