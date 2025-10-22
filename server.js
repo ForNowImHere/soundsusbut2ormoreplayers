@@ -1,86 +1,61 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const path = require("path");
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-const PORT = 5000;
+app.use(express.static("public"));
 
-// Store rooms in memory
-const games = {};
+const rooms = {}; // { roomId: { players: [], theme: 'classic', gameData: {...} } }
 
-// Serve static files
-app.use(express.static(path.join(__dirname, "public")));
-
-// Generate room code
-function generateRoomCode() {
-  return Math.random().toString(36).substr(2, 6).toUpperCase();
+function makeRoomCode() {
+  return Math.random().toString(36).substring(2,7).toUpperCase();
 }
 
 io.on("connection", (socket) => {
-  console.log("🟢 Player connected:", socket.id);
+  console.log("New connection:", socket.id);
 
-  socket.on("joinGame", ({ roomId, playerName }) => {
-    if (!roomId) roomId = generateRoomCode();
-
-    if (!games[roomId]) {
-      games[roomId] = {
-        players: [],
-        scores: {},
-        turnIndex: 0,
-        state: "setup",
-        currentCard: null,
-        guesserQueue: null,
-        currentGuesserIndex: null,
-        history: [],
-        theme: "classic"
-      };
-    }
-
-    const game = games[roomId];
-
-    if (!game.players.includes(playerName)) {
-      game.players.push(playerName);
-      game.scores[playerName] = 0;
-    }
-
+  socket.on("joinGame", ({roomId, playerName}) => {
+    if(!roomId) roomId = makeRoomCode();
+    if(!rooms[roomId]) rooms[roomId] = { players: [], theme:"classic", gameData:null };
+    
     socket.join(roomId);
-    socket.roomId = roomId;
-    socket.playerName = playerName;
 
+    // Avoid duplicate player names
+    if(!rooms[roomId].players.includes(playerName)) rooms[roomId].players.push(playerName);
+
+    // Store player info in socket
+    socket.data = { roomId, playerName };
+
+    // Send back room joined info
     socket.emit("roomJoined", roomId);
-    io.to(roomId).emit("updateGame", game);
+
+    // Update all clients in room
+    io.to(roomId).emit("updateGame", rooms[roomId]);
   });
 
   socket.on("updateGameState", (data) => {
-    const roomId = socket.roomId;
-    if (roomId && games[roomId]) {
-      Object.assign(games[roomId], data);
-      io.to(roomId).emit("updateGame", games[roomId]);
-    }
+    const { roomId } = socket.data;
+    if(!roomId) return;
+    rooms[roomId].gameData = data;
+    io.to(roomId).emit("updateGame", data);
+  });
+
+  socket.on("setTheme", (theme) => {
+    const { roomId } = socket.data;
+    if(!roomId) return;
+    rooms[roomId].theme = theme;
+    io.to(roomId).emit("updateGame", rooms[roomId]);
   });
 
   socket.on("disconnect", () => {
-    const { roomId, playerName } = socket;
-    if (roomId && games[roomId]) {
-      const game = games[roomId];
-      game.players = game.players.filter(p => p !== playerName);
-      delete game.scores[playerName];
-
-      if (game.players.length === 0) {
-        delete games[roomId];
-        console.log(`🗑️ Room ${roomId} deleted (empty)`);
-      } else {
-        io.to(roomId).emit("updateGame", game);
-      }
+    const { roomId, playerName } = socket.data;
+    if(roomId && rooms[roomId]){
+      rooms[roomId].players = rooms[roomId].players.filter(p=>p!==playerName);
+      io.to(roomId).emit("updateGame", rooms[roomId]);
     }
-    console.log("🔴 Player disconnected:", socket.id);
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
-});
+server.listen(5000, () => console.log("Server running on http://localhost:5000"));
